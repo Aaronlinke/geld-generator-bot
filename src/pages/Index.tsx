@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { StatsOverview } from "@/components/dashboard/StatsOverview";
 import { BotCard } from "@/components/dashboard/BotCard";
 import { EarningsChart } from "@/components/dashboard/EarningsChart";
+import { WithdrawalDialog } from "@/components/dashboard/WithdrawalDialog";
 import { Card } from "@/components/ui/card";
 
 const Index = () => {
+  const [withdrawalOpen, setWithdrawalOpen] = useState(false);
+  
   const bots = [
     {
       name: "Crypto Arbitrage Bot",
@@ -85,7 +89,10 @@ const Index = () => {
                 <button className="w-full text-left p-2 rounded hover:bg-secondary/20 text-sm text-muted-foreground hover:text-card-foreground transition-colors">
                   ⚙️ System-Einstellungen
                 </button>
-                <button className="w-full text-left p-2 rounded hover:bg-secondary/20 text-sm text-muted-foreground hover:text-card-foreground transition-colors">
+                <button 
+                  onClick={() => setWithdrawalOpen(true)}
+                  className="w-full text-left p-2 rounded hover:bg-secondary/20 text-sm text-muted-foreground hover:text-card-foreground transition-colors"
+                >
                   💳 Auszahlung anfordern
                 </button>
               </div>
@@ -107,6 +114,12 @@ const Index = () => {
             <BotCard key={index} {...bot} />
           ))}
         </div>
+
+        <WithdrawalDialog 
+          open={withdrawalOpen}
+          onOpenChange={setWithdrawalOpen}
+          availableBalance="€234,567.89"
+        />
       </div>
     </div>
   );
