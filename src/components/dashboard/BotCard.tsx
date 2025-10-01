@@ -12,6 +12,8 @@ interface BotCardProps {
   progress: number;
   icon: string;
   onSettingsClick?: () => void;
+  onStatusToggle?: () => void;
+  onDetailsClick?: () => void;
 }
 
 export const BotCard = ({ 
@@ -22,7 +24,9 @@ export const BotCard = ({
   status, 
   progress, 
   icon,
-  onSettingsClick
+  onSettingsClick,
+  onStatusToggle,
+  onDetailsClick
 }: BotCardProps) => {
   const getStatusColor = () => {
     switch (status) {
@@ -43,8 +47,8 @@ export const BotCard = ({
   };
 
   return (
-    <Card className="bg-gradient-dark border-border hover:shadow-glow hover:border-primary/50 transition-all duration-300">
-      <CardHeader className="pb-3">
+    <Card className="bg-gradient-dark border-border hover:shadow-glow hover:border-primary/50 transition-all duration-300 cursor-pointer">
+      <CardHeader className="pb-3" onClick={onDetailsClick}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="text-2xl">{icon}</div>
@@ -79,11 +83,17 @@ export const BotCard = ({
         </div>
 
         <div className="flex gap-2 pt-2">
-          <Button variant="outline" size="sm" className="flex-1" onClick={onSettingsClick}>
+          <Button variant="outline" size="sm" className="flex-1" onClick={(e) => { e.stopPropagation(); onSettingsClick?.(); }}>
             Einstellungen
           </Button>
-          <Button variant={status === "active" ? "destructive" : "default"} size="sm" className="flex-1">
-            {status === "active" ? "Pausieren" : "Starten"}
+          <Button 
+            variant={status === "active" ? "destructive" : "default"} 
+            size="sm" 
+            className="flex-1"
+            onClick={(e) => { e.stopPropagation(); onStatusToggle?.(); }}
+            disabled={status === "maintenance"}
+          >
+            {status === "active" ? "Pausieren" : status === "paused" ? "Starten" : "Wartung"}
           </Button>
         </div>
       </CardContent>

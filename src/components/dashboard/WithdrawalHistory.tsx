@@ -2,60 +2,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Calendar, TrendingUp, Clock } from "lucide-react";
+import { Withdrawal } from "@/types/bot";
 
-interface Withdrawal {
-  id: string;
-  amount: string;
-  date: string;
-  method: string;
-  status: "completed" | "pending" | "failed";
-  account: string;
+interface WithdrawalHistoryProps {
+  withdrawals: Withdrawal[];
 }
 
-const withdrawals: Withdrawal[] = [
-  {
-    id: "WD-001",
-    amount: "€5,000.00",
-    date: "2025-09-28",
-    method: "Bank Transfer",
-    status: "completed",
-    account: "DE89 **** 1234"
-  },
-  {
-    id: "WD-002",
-    amount: "€2,500.00",
-    date: "2025-09-25",
-    method: "PayPal",
-    status: "completed",
-    account: "user@email.com"
-  },
-  {
-    id: "WD-003",
-    amount: "€10,000.00",
-    date: "2025-09-30",
-    method: "Bank Transfer",
-    status: "pending",
-    account: "DE89 **** 1234"
-  },
-  {
-    id: "WD-004",
-    amount: "€3,200.00",
-    date: "2025-09-20",
-    method: "Crypto",
-    status: "completed",
-    account: "0x7a8f...4d2e"
-  },
-  {
-    id: "WD-005",
-    amount: "€1,800.00",
-    date: "2025-09-15",
-    method: "PayPal",
-    status: "failed",
-    account: "user@email.com"
-  }
-];
-
-export const WithdrawalHistory = () => {
+export const WithdrawalHistory = ({ withdrawals }: WithdrawalHistoryProps) => {
   const getStatusVariant = (status: string) => {
     switch (status) {
       case "completed": return "success";

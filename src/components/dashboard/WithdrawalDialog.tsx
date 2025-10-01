@@ -23,9 +23,10 @@ interface WithdrawalDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   availableBalance: string;
+  onWithdrawalSubmit?: (withdrawal: { amount: string; method: string; account: string }) => void;
 }
 
-export const WithdrawalDialog = ({ open, onOpenChange, availableBalance }: WithdrawalDialogProps) => {
+export const WithdrawalDialog = ({ open, onOpenChange, availableBalance, onWithdrawalSubmit }: WithdrawalDialogProps) => {
   const [amount, setAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [accountDetails, setAccountDetails] = useState("");
@@ -60,9 +61,21 @@ export const WithdrawalDialog = ({ open, onOpenChange, availableBalance }: Withd
 
     // Simulate processing
     setTimeout(() => {
+      const methodMap: Record<string, string> = {
+        bank: "Bank Transfer",
+        paypal: "PayPal",
+        crypto: "Crypto"
+      };
+
+      onWithdrawalSubmit?.({
+        amount: `€${numAmount.toFixed(2)}`,
+        method: methodMap[paymentMethod],
+        account: accountDetails
+      });
+
       toast({
         title: "Auszahlung beantragt",
-        description: `€${numAmount.toFixed(2)} wird in 1-3 Werktagen auf Ihr ${paymentMethod}-Konto überwiesen.`,
+        description: `€${numAmount.toFixed(2)} wird in 1-3 Werktagen auf Ihr ${methodMap[paymentMethod]}-Konto überwiesen.`,
       });
       
       setAmount("");
