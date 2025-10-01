@@ -11,6 +11,7 @@ interface BotCardProps {
   status: "active" | "paused" | "maintenance";
   progress: number;
   icon: string;
+  onSettingsClick?: () => void;
 }
 
 export const BotCard = ({ 
@@ -20,7 +21,8 @@ export const BotCard = ({
   dailyProfit, 
   status, 
   progress, 
-  icon 
+  icon,
+  onSettingsClick
 }: BotCardProps) => {
   const getStatusColor = () => {
     switch (status) {
@@ -77,7 +79,7 @@ export const BotCard = ({
         </div>
 
         <div className="flex gap-2 pt-2">
-          <Button variant="outline" size="sm" className="flex-1">
+          <Button variant="outline" size="sm" className="flex-1" onClick={onSettingsClick}>
             Einstellungen
           </Button>
           <Button variant={status === "active" ? "destructive" : "default"} size="sm" className="flex-1">
