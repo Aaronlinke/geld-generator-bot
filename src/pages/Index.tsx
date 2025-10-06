@@ -15,11 +15,12 @@ import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
 import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { BotDetailsDialog } from "@/components/dashboard/BotDetailsDialog";
 import { SystemSettings } from "@/components/dashboard/SystemSettings";
-import { Card } from "@/components/ui/card";
+import { AddBotDialog } from "@/components/dashboard/AddBotDialog";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bot, Withdrawal, Activity } from "@/types/bot";
-import { toast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Loader2, Plus } from "lucide-react";
 
 const Index = () => {
   const { user, loading: authLoading, signOut } = useAuth();
@@ -27,8 +28,13 @@ const Index = () => {
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [addBotOpen, setAddBotOpen] = useState(false);
   const [selectedBot, setSelectedBot] = useState<Bot | null>(null);
   const [loading, setLoading] = useState(true);
+  const [bots, setBots] = useState<Bot[]>([]);
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [totalBalance, setTotalBalance] = useState(0);
 
   // Redirect to auth if not logged in
   useEffect(() => {
@@ -37,12 +43,59 @@ const Index = () => {
     }
   }, [user, authLoading, navigate]);
 
-  // Load user's bot strategies from database
+  // Load all data from database
   useEffect(() => {
     if (user) {
-      loadBotStrategies();
+      loadAllData();
+      const cleanup = setupRealtimeSubscriptions();
+      return cleanup;
     }
   }, [user]);
+
+  const loadAllData = async () => {
+    try {
+      await Promise.all([
+        loadBotStrategies(),
+        loadWithdrawals(),
+        loadActivities(),
+        calculateTotalBalance()
+      ]);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const setupRealtimeSubscriptions = () => {
+    const botsChannel = supabase
+      .channel('bot_strategies_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bot_strategies' }, () => {
+        loadBotStrategies();
+      })
+      .subscribe();
+
+    const transactionsChannel = supabase
+      .channel('transactions_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'financial_transactions' }, () => {
+        loadWithdrawals();
+        calculateTotalBalance();
+      })
+      .subscribe();
+
+    const logsChannel = supabase
+      .channel('audit_logs_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'audit_logs' }, () => {
+        loadActivities();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(botsChannel);
+      supabase.removeChannel(transactionsChannel);
+      supabase.removeChannel(logsChannel);
+    };
+  };
 
   const loadBotStrategies = async () => {
     try {
@@ -53,23 +106,86 @@ const Index = () => {
 
       if (error) throw error;
 
-      if (data && data.length > 0) {
-        const formattedBots: Bot[] = data.map(strategy => ({
-          id: strategy.id,
-          name: strategy.name,
-          description: strategy.description || '',
-          earnings: `€${strategy.total_earnings?.toFixed(2) || '0.00'}`,
-          dailyProfit: `€${strategy.daily_profit?.toFixed(2) || '0.00'}`,
-          status: strategy.status as any,
-          progress: Math.round((strategy.total_trades || 0) / (strategy.max_daily_trades || 10) * 100),
-          icon: getIconForStrategyType(strategy.strategy_type)
-        }));
-        setBots(formattedBots);
-      }
+      const formattedBots: Bot[] = (data || []).map(strategy => ({
+        id: strategy.id,
+        name: strategy.name,
+        description: strategy.description || '',
+        earnings: `€${strategy.total_earnings?.toFixed(2) || '0.00'}`,
+        dailyProfit: `€${strategy.daily_profit?.toFixed(2) || '0.00'}`,
+        status: strategy.status as any,
+        progress: Math.round((strategy.total_trades || 0) / (strategy.max_daily_trades || 10) * 100),
+        icon: getIconForStrategyType(strategy.strategy_type)
+      }));
+      setBots(formattedBots);
     } catch (error) {
       console.error('Error loading bot strategies:', error);
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  const loadWithdrawals = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('financial_transactions')
+        .select('*')
+        .eq('transaction_type', 'withdrawal')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      const formattedWithdrawals: Withdrawal[] = (data || []).map(tx => ({
+        id: tx.id,
+        amount: `€${tx.amount.toFixed(2)}`,
+        date: new Date(tx.created_at).toLocaleDateString('de-DE'),
+        method: tx.payment_method || 'Bank Transfer',
+        status: tx.status as any,
+        account: tx.blockchain_hash || tx.description || 'N/A'
+      }));
+      setWithdrawals(formattedWithdrawals);
+    } catch (error) {
+      console.error('Error loading withdrawals:', error);
+    }
+  };
+
+  const loadActivities = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      const formattedActivities: Activity[] = (data || []).map(log => {
+        const metadata = log.metadata as any;
+        return {
+          id: log.id,
+          type: getActivityType(log.action),
+          title: formatActivityTitle(log.action),
+          description: metadata?.bot_name || metadata?.description || log.action,
+          timestamp: formatTimestamp(log.created_at),
+          icon: getActivityIcon(log.action)
+        };
+      });
+      setActivities(formattedActivities);
+    } catch (error) {
+      console.error('Error loading activities:', error);
+    }
+  };
+
+  const calculateTotalBalance = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('bot_strategies')
+        .select('total_earnings');
+
+      if (error) throw error;
+
+      const total = (data || []).reduce((sum, bot) => sum + (bot.total_earnings || 0), 0);
+      setTotalBalance(total);
+    } catch (error) {
+      console.error('Error calculating balance:', error);
     }
   };
 
@@ -85,191 +201,106 @@ const Index = () => {
     return icons[type] || '🤖';
   };
 
-  if (authLoading || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
-  
-  const [bots, setBots] = useState<Bot[]>([
-    {
-      id: "1",
-      name: "Crypto Arbitrage Bot",
-      description: "Automatischer Krypto-Handel zwischen Börsen",
-      earnings: "€45,678.23",
-      dailyProfit: "€1,234.56",
-      status: "active",
-      progress: 87,
-      icon: "₿"
-    },
-    {
-      id: "2",
-      name: "Forex Trading Bot",
-      description: "KI-gestützter Devisenhandel",
-      earnings: "€32,145.67",
-      dailyProfit: "€892.34",
-      status: "active",
-      progress: 92,
-      icon: "💱"
-    },
-    {
-      id: "3",
-      name: "Affiliate Marketing Bot",
-      description: "Automatische Affiliate-Kampagnen",
-      earnings: "€18,934.21",
-      dailyProfit: "€456.78",
-      status: "active",
-      progress: 76,
-      icon: "🔗"
-    },
-    {
-      id: "4",
-      name: "Dropshipping Bot",
-      description: "Produktlistung und Bestellabwicklung",
-      earnings: "€28,567.89",
-      dailyProfit: "€723.45",
-      status: "paused",
-      progress: 45,
-      icon: "📦"
-    },
-    {
-      id: "5",
-      name: "Social Media Bot",
-      description: "Automatisierte Content-Monetarisierung",
-      earnings: "€12,345.67",
-      dailyProfit: "€234.56",
-      status: "active",
-      progress: 68,
-      icon: "📱"
-    },
-    {
-      id: "6",
-      name: "Mining Pool Bot",
-      description: "Optimierte Krypto-Mining Verwaltung",
-      earnings: "€56,789.12",
-      dailyProfit: "€1,456.78",
-      status: "maintenance",
-      progress: 0,
-      icon: "⛏️"
-    }
-  ]);
-
-  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([
-    {
-      id: "WD-001",
-      amount: "€5,000.00",
-      date: "2025-09-28",
-      method: "Bank Transfer",
-      status: "completed",
-      account: "DE89 **** 1234"
-    },
-    {
-      id: "WD-002",
-      amount: "€2,500.00",
-      date: "2025-09-25",
-      method: "PayPal",
-      status: "completed",
-      account: "user@email.com"
-    },
-    {
-      id: "WD-003",
-      amount: "€10,000.00",
-      date: "2025-09-30",
-      method: "Bank Transfer",
-      status: "pending",
-      account: "DE89 **** 1234"
-    }
-  ]);
-
-  const [activities, setActivities] = useState<Activity[]>([
-    {
-      id: "1",
-      type: "earning",
-      title: "Neuer Gewinn",
-      description: "Crypto Arbitrage Bot: +€1,234.56",
-      timestamp: "Vor 5 Minuten",
-      icon: "💰"
-    },
-    {
-      id: "2",
-      type: "bot_started",
-      title: "Bot gestartet",
-      description: "Forex Trading Bot wurde aktiviert",
-      timestamp: "Vor 1 Stunde",
-      icon: "🚀"
-    },
-    {
-      id: "3",
-      type: "withdrawal",
-      title: "Auszahlung beantragt",
-      description: "€10,000.00 wird verarbeitet",
-      timestamp: "Vor 2 Stunden",
-      icon: "💳"
-    },
-    {
-      id: "4",
-      type: "earning",
-      title: "Tagesgewinn erreicht",
-      description: "€47,523.84 heute verdient",
-      timestamp: "Vor 3 Stunden",
-      icon: "📈"
-    }
-  ]);
-
-  const handleBotStatusToggle = (botId: string) => {
-    setBots(prev => prev.map(bot => {
-      if (bot.id === botId) {
-        const newStatus = bot.status === "active" ? "paused" : "active";
-        const statusText = newStatus === "active" ? "gestartet" : "pausiert";
-        
-        toast({
-          title: `Bot ${statusText}`,
-          description: `${bot.name} wurde ${statusText}.`,
-        });
-
-        const newActivity: Activity = {
-          id: Date.now().toString(),
-          type: newStatus === "active" ? "bot_started" : "bot_paused",
-          title: `Bot ${statusText}`,
-          description: `${bot.name} wurde ${statusText}`,
-          timestamp: "Gerade eben",
-          icon: newStatus === "active" ? "🚀" : "⏸️"
-        };
-        
-        setActivities(prev => [newActivity, ...prev]);
-
-        return { ...bot, status: newStatus };
-      }
-      return bot;
-    }));
+  const getActivityType = (action: string): Activity["type"] => {
+    if (action.includes('bot_created') || action.includes('bot_started')) return 'bot_started';
+    if (action.includes('bot_paused')) return 'bot_paused';
+    if (action.includes('withdrawal')) return 'withdrawal';
+    if (action.includes('earning')) return 'earning';
+    return 'alert';
   };
 
-  const handleWithdrawalSubmit = (withdrawal: Omit<Withdrawal, "id" | "date" | "status">) => {
-    const newWithdrawal: Withdrawal = {
-      id: `WD-${String(withdrawals.length + 1).padStart(3, '0')}`,
-      date: new Date().toISOString().split('T')[0],
-      status: "pending",
-      ...withdrawal
+  const formatActivityTitle = (action: string): string => {
+    const titles: Record<string, string> = {
+      'bot_created': 'Bot erstellt',
+      'bot_started': 'Bot gestartet',
+      'bot_paused': 'Bot pausiert',
+      'bot_updated': 'Bot aktualisiert',
+      'withdrawal_created': 'Auszahlung beantragt',
+      'withdrawal_completed': 'Auszahlung abgeschlossen'
     };
+    return titles[action] || action;
+  };
 
-    setWithdrawals(prev => [newWithdrawal, ...prev]);
-
-    const newActivity: Activity = {
-      id: Date.now().toString(),
-      type: "withdrawal",
-      title: "Auszahlung beantragt",
-      description: `${withdrawal.amount} wird verarbeitet`,
-      timestamp: "Gerade eben",
-      icon: "💳"
-    };
+  const formatTimestamp = (timestamp: string): string => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
     
-    setActivities(prev => [newActivity, ...prev]);
+    if (diffMins < 1) return 'Gerade eben';
+    if (diffMins < 60) return `Vor ${diffMins} Minuten`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `Vor ${diffHours} Stunden`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `Vor ${diffDays} Tagen`;
+  };
+
+  const getActivityIcon = (action: string): string => {
+    if (action.includes('bot_started') || action.includes('bot_created')) return '🚀';
+    if (action.includes('bot_paused')) return '⏸️';
+    if (action.includes('withdrawal')) return '💳';
+    if (action.includes('earning')) return '💰';
+    return '🔔';
+  };
+
+  const handleBotStatusToggle = async (botId: string) => {
+    const bot = bots.find(b => b.id === botId);
+    if (!bot) return;
+
+    const newStatus = bot.status === "active" ? "paused" : "active";
+    
+    try {
+      const { error } = await supabase
+        .from('bot_strategies')
+        .update({ status: newStatus })
+        .eq('id', botId);
+
+      if (error) throw error;
+
+      await supabase.from('audit_logs').insert({
+        user_id: user?.id,
+        action: newStatus === 'active' ? 'bot_started' : 'bot_paused',
+        resource_type: 'bot_strategy',
+        resource_id: botId,
+        metadata: { bot_name: bot.name }
+      });
+
+      toast.success(`Bot ${newStatus === 'active' ? 'gestartet' : 'pausiert'}`);
+    } catch (error: any) {
+      toast.error(error.message || 'Fehler beim Aktualisieren des Bots');
+    }
+  };
+
+  const handleWithdrawalSubmit = async (withdrawal: Omit<Withdrawal, "id" | "date" | "status">) => {
+    try {
+      const amount = parseFloat(withdrawal.amount.replace('€', '').replace(',', '.'));
+
+      const { error } = await supabase
+        .from('financial_transactions')
+        .insert({
+          user_id: user?.id,
+          transaction_type: 'withdrawal',
+          amount,
+          currency: 'EUR',
+          status: 'pending',
+          payment_method: withdrawal.method,
+          description: withdrawal.account
+        });
+
+      if (error) throw error;
+
+      await supabase.from('audit_logs').insert({
+        user_id: user?.id,
+        action: 'withdrawal_created',
+        resource_type: 'financial_transaction',
+        metadata: { amount: withdrawal.amount, method: withdrawal.method }
+      });
+
+      toast.success('Auszahlung erfolgreich beantragt!');
+      setWithdrawalOpen(false);
+    } catch (error: any) {
+      toast.error(error.message || 'Fehler bei der Auszahlung');
+    }
   };
 
   const handleBotDetails = (bot: Bot) => {
@@ -281,6 +312,18 @@ const Index = () => {
     setSelectedBot(bot);
     setSettingsOpen(true);
   };
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -309,26 +352,42 @@ const Index = () => {
               </div>
             </div>
             
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-foreground mb-4">
-                Aktive Geld-Maschinen
-              </h2>
-              <p className="text-muted-foreground mb-6">
-                Überwachen und verwalten Sie Ihre automatisierten Einkommensquellen
-              </p>
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground mb-2">
+                  Aktive Geld-Maschinen
+                </h2>
+                <p className="text-muted-foreground">
+                  {bots.length === 0 ? 'Erstelle deinen ersten Bot' : `${bots.length} Bot${bots.length !== 1 ? 's' : ''} aktiv`}
+                </p>
+              </div>
+              <Button onClick={() => setAddBotOpen(true)} size="lg">
+                <Plus className="mr-2 h-5 w-5" />
+                Bot hinzufügen
+              </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {bots.map((bot) => (
-                <BotCard 
-                  key={bot.id} 
-                  {...bot}
-                  onStatusToggle={() => handleBotStatusToggle(bot.id)}
-                  onSettingsClick={() => handleBotSettings(bot)}
-                  onDetailsClick={() => handleBotDetails(bot)}
-                />
-              ))}
-            </div>
+            {bots.length === 0 ? (
+              <div className="text-center py-12 bg-card rounded-lg border-2 border-dashed">
+                <p className="text-muted-foreground mb-4">Noch keine Bots erstellt</p>
+                <Button onClick={() => setAddBotOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Ersten Bot erstellen
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {bots.map((bot) => (
+                  <BotCard 
+                    key={bot.id} 
+                    {...bot}
+                    onStatusToggle={() => handleBotStatusToggle(bot.id)}
+                    onSettingsClick={() => handleBotSettings(bot)}
+                    onDetailsClick={() => handleBotDetails(bot)}
+                  />
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="analytics" className="mt-6">
@@ -355,7 +414,7 @@ const Index = () => {
         <WithdrawalDialog 
           open={withdrawalOpen}
           onOpenChange={setWithdrawalOpen}
-          availableBalance="€234,567.89"
+          availableBalance={`€${totalBalance.toFixed(2)}`}
           onWithdrawalSubmit={handleWithdrawalSubmit}
         />
 
@@ -369,6 +428,12 @@ const Index = () => {
           bot={selectedBot}
           open={detailsOpen}
           onOpenChange={setDetailsOpen}
+        />
+
+        <AddBotDialog
+          open={addBotOpen}
+          onOpenChange={setAddBotOpen}
+          userId={user.id}
         />
       </div>
     </div>
