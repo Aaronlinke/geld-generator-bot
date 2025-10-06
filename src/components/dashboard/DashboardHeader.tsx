@@ -1,8 +1,14 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { LogOut } from "lucide-react";
 import dashboardHero from "@/assets/dashboard-hero.jpg";
 
-export const DashboardHeader = () => {
+interface DashboardHeaderProps {
+  onLogout?: () => void;
+}
+
+export const DashboardHeader = ({ onLogout }: DashboardHeaderProps) => {
   return (
     <div className="relative overflow-hidden rounded-lg mb-8">
       <div 
@@ -31,6 +37,17 @@ export const DashboardHeader = () => {
                 Heute verdient
               </div>
             </div>
+            {onLogout && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onLogout}
+                className="ml-2"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            )}
           </div>
         </div>
       </div>

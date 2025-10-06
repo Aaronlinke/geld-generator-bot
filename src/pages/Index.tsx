@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { StatsOverview } from "@/components/dashboard/StatsOverview";
 import { BotCard } from "@/components/dashboard/BotCard";
@@ -16,12 +19,83 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bot, Withdrawal, Activity } from "@/types/bot";
 import { toast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 
 const Index = () => {
+  const { user, loading: authLoading, signOut } = useAuth();
+  const navigate = useNavigate();
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedBot, setSelectedBot] = useState<Bot | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Redirect to auth if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/auth");
+    }
+  }, [user, authLoading, navigate]);
+
+  // Load user's bot strategies from database
+  useEffect(() => {
+    if (user) {
+      loadBotStrategies();
+    }
+  }, [user]);
+
+  const loadBotStrategies = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('bot_strategies')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const formattedBots: Bot[] = data.map(strategy => ({
+          id: strategy.id,
+          name: strategy.name,
+          description: strategy.description || '',
+          earnings: `€${strategy.total_earnings?.toFixed(2) || '0.00'}`,
+          dailyProfit: `€${strategy.daily_profit?.toFixed(2) || '0.00'}`,
+          status: strategy.status as any,
+          progress: Math.round((strategy.total_trades || 0) / (strategy.max_daily_trades || 10) * 100),
+          icon: getIconForStrategyType(strategy.strategy_type)
+        }));
+        setBots(formattedBots);
+      }
+    } catch (error) {
+      console.error('Error loading bot strategies:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getIconForStrategyType = (type: string): string => {
+    const icons: Record<string, string> = {
+      'crypto_arbitrage': '₿',
+      'forex': '💱',
+      'affiliate': '🔗',
+      'dropshipping': '📦',
+      'social_media': '📱',
+      'mining': '⛏️'
+    };
+    return icons[type] || '🤖';
+  };
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
   
   const [bots, setBots] = useState<Bot[]>([
     {
@@ -211,7 +285,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto">
-        <DashboardHeader />
+        <DashboardHeader onLogout={signOut} />
         
         <Tabs defaultValue="overview" className="mb-8">
           <TabsList className="grid w-full grid-cols-6">
