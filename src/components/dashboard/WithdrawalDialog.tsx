@@ -18,6 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 interface WithdrawalDialogProps {
   open: boolean;
@@ -32,6 +34,7 @@ export const WithdrawalDialog = ({ open, onOpenChange, availableBalance, onWithd
   const [accountDetails, setAccountDetails] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const handleWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,15 +60,61 @@ export const WithdrawalDialog = ({ open, onOpenChange, availableBalance, onWithd
       return;
     }
 
+    if (!user) {
+      toast({
+        title: "Fehler",
+        description: "Sie müssen angemeldet sein",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsProcessing(true);
 
-    // Simulate processing
-    setTimeout(() => {
+    try {
       const methodMap: Record<string, string> = {
         bank: "Bank Transfer",
         paypal: "PayPal",
         crypto: "Crypto"
       };
+
+      // Create withdrawal transaction in database
+      const { error } = await supabase
+        .from('financial_transactions')
+        .insert({
+          user_id: user.id,
+          transaction_type: 'withdrawal',
+          amount: numAmount,
+          currency: 'EUR',
+          payment_method: methodMap[paymentMethod],
+          description: `Auszahlung via ${methodMap[paymentMethod]} - ${accountDetails}`,
+          status: 'pending',
+          metadata: {
+            account_details: accountDetails,
+            payment_method: paymentMethod
+          }
+        });
+
+      if (error) throw error;
+
+      // Create audit log
+      await supabase.from('audit_logs').insert({
+        user_id: user.id,
+        action: 'withdrawal_requested',
+        resource_type: 'financial_transaction',
+        metadata: { 
+          amount: numAmount,
+          payment_method: methodMap[paymentMethod]
+        }
+      });
+
+      // Create notification
+      await supabase.from('notifications').insert({
+        user_id: user.id,
+        type: 'info',
+        title: 'Auszahlung beantragt',
+        message: `€${numAmount.toFixed(2)} wird in 1-3 Werktagen auf Ihr ${methodMap[paymentMethod]}-Konto überwiesen.`
+      });
 
       onWithdrawalSubmit?.({
         amount: `€${numAmount.toFixed(2)}`,
@@ -81,9 +130,17 @@ export const WithdrawalDialog = ({ open, onOpenChange, availableBalance, onWithd
       setAmount("");
       setPaymentMethod("");
       setAccountDetails("");
-      setIsProcessing(false);
       onOpenChange(false);
-    }, 1500);
+    } catch (error: any) {
+      console.error('Withdrawal error:', error);
+      toast({
+        title: "Fehler",
+        description: error.message || "Auszahlung konnte nicht durchgeführt werden",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (

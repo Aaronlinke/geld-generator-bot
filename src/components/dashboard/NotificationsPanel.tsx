@@ -1,62 +1,74 @@
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Bell, TrendingUp, AlertTriangle, CheckCircle, Info } from "lucide-react";
+import { Bell, AlertTriangle, CheckCircle, Info } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { formatDistanceToNow } from "date-fns";
+import { de } from "date-fns/locale";
 
 interface Notification {
   id: string;
   type: "success" | "warning" | "error" | "info";
   title: string;
   message: string;
-  time: string;
+  created_at: string;
   read: boolean;
 }
 
-const notifications: Notification[] = [
-  {
-    id: "1",
-    type: "success",
-    title: "Crypto Bot: Gewinn erzielt",
-    message: "€1,234.56 Gewinn in den letzten 24 Stunden",
-    time: "vor 5 Minuten",
-    read: false,
-  },
-  {
-    id: "2",
-    type: "warning",
-    title: "Forex Bot: Hohes Volumen",
-    message: "Ungewöhnlich hohe Handelsaktivität erkannt",
-    time: "vor 23 Minuten",
-    read: false,
-  },
-  {
-    id: "3",
-    type: "error",
-    title: "Mining Bot: Verbindungsfehler",
-    message: "Konnte keine Verbindung zum Mining Pool herstellen",
-    time: "vor 1 Stunde",
-    read: false,
-  },
-  {
-    id: "4",
-    type: "info",
-    title: "System Update verfügbar",
-    message: "Neue Features und Verbesserungen sind verfügbar",
-    time: "vor 2 Stunden",
-    read: true,
-  },
-  {
-    id: "5",
-    type: "success",
-    title: "Auszahlung abgeschlossen",
-    message: "€5,000.00 wurden auf Ihr Konto überwiesen",
-    time: "vor 3 Stunden",
-    read: true,
-  },
-];
-
 export const NotificationsPanel = () => {
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Load notifications
+    const loadNotifications = async () => {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error('Error loading notifications:', error);
+        return;
+      }
+
+      setNotifications((data || []).map(n => ({
+        ...n,
+        type: n.type as "success" | "warning" | "error" | "info"
+      })));
+    };
+
+    loadNotifications();
+
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('notifications_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          loadNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
   const getIcon = (type: string) => {
     switch (type) {
       case "success":
@@ -67,6 +79,22 @@ export const NotificationsPanel = () => {
         return <AlertTriangle className="w-5 h-5 text-destructive" />;
       default:
         return <Info className="w-5 h-5 text-primary" />;
+    }
+  };
+
+  const markAllAsRead = async () => {
+    if (!user) return;
+
+    const unreadIds = notifications.filter(n => !n.read).map(n => n.id);
+    if (unreadIds.length === 0) return;
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .in('id', unreadIds);
+
+    if (error) {
+      console.error('Error marking notifications as read:', error);
     }
   };
 
@@ -85,7 +113,7 @@ export const NotificationsPanel = () => {
               </Badge>
             )}
           </CardTitle>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" onClick={markAllAsRead}>
             Alle als gelesen markieren
           </Button>
         </div>
@@ -110,7 +138,7 @@ export const NotificationsPanel = () => {
                         {notification.title}
                       </h4>
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {notification.time}
+                        {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true, locale: de })}
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground mt-1">
