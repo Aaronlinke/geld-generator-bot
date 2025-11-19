@@ -16,39 +16,136 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { Download, TrendingUp } from "lucide-react";
-
-const performanceData = [
-  { month: "Jan", gewinn: 4000, kosten: 2400, netto: 1600 },
-  { month: "Feb", gewinn: 3000, kosten: 1398, netto: 1602 },
-  { month: "Mär", gewinn: 2000, kosten: 9800, netto: -7800 },
-  { month: "Apr", gewinn: 2780, kosten: 3908, netto: -1128 },
-  { month: "Mai", gewinn: 1890, kosten: 4800, netto: -2910 },
-  { month: "Jun", gewinn: 2390, kosten: 3800, netto: -1410 },
-];
-
-const botDistribution = [
-  { name: "Crypto Bots", value: 35, color: "hsl(142 71% 45%)" },
-  { name: "Trading Bots", value: 25, color: "hsl(217 32% 20%)" },
-  { name: "Marketing Bots", value: 20, color: "hsl(45 93% 58%)" },
-  { name: "E-Commerce", value: 20, color: "hsl(0 84% 60%)" },
-];
-
-const hourlyPerformance = [
-  { time: "00:00", aktivität: 40 },
-  { time: "03:00", aktivität: 30 },
-  { time: "06:00", aktivität: 60 },
-  { time: "09:00", aktivität: 80 },
-  { time: "12:00", aktivität: 95 },
-  { time: "15:00", aktivität: 70 },
-  { time: "18:00", aktivität: 85 },
-  { time: "21:00", aktivität: 50 },
-];
+import { Download, TrendingUp, RefreshCw } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 export const AdvancedAnalytics = () => {
+  const { user } = useAuth();
+  const [performanceData, setPerformanceData] = useState<any[]>([]);
+  const [botDistribution, setBotDistribution] = useState<any[]>([]);
+  const [hourlyPerformance, setHourlyPerformance] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      loadAnalytics();
+    }
+  }, [user]);
+
+  const loadAnalytics = async () => {
+    try {
+      setLoading(true);
+
+      // Load monthly performance data
+      const { data: transactions } = await supabase
+        .from('financial_transactions')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: true });
+
+      if (transactions) {
+        // Group by month
+        const monthlyData = transactions.reduce((acc: any, tx: any) => {
+          const month = new Date(tx.created_at).toLocaleDateString('de-DE', { month: 'short' });
+          if (!acc[month]) {
+            acc[month] = { month, gewinn: 0, kosten: 0, netto: 0 };
+          }
+          
+          const amount = parseFloat(tx.amount);
+          if (tx.transaction_type === 'bot_earning') {
+            acc[month].gewinn += amount > 0 ? amount : 0;
+            acc[month].kosten += amount < 0 ? Math.abs(amount) : 0;
+          } else if (tx.transaction_type === 'withdrawal') {
+            acc[month].kosten += Math.abs(amount);
+          }
+          acc[month].netto = acc[month].gewinn - acc[month].kosten;
+          
+          return acc;
+        }, {});
+
+        setPerformanceData(Object.values(monthlyData));
+      }
+
+      // Load bot distribution
+      const { data: bots } = await supabase
+        .from('bot_strategies')
+        .select('strategy_type')
+        .eq('user_id', user?.id);
+
+      if (bots) {
+        const distribution = bots.reduce((acc: any, bot: any) => {
+          acc[bot.strategy_type] = (acc[bot.strategy_type] || 0) + 1;
+          return acc;
+        }, {});
+
+        const colors = {
+          scalping: "hsl(142 71% 45%)",
+          swing: "hsl(217 32% 20%)",
+          arbitrage: "hsl(45 93% 58%)",
+          market_making: "hsl(0 84% 60%)",
+        };
+
+        const distData = Object.entries(distribution).map(([type, count]) => ({
+          name: type.charAt(0).toUpperCase() + type.slice(1),
+          value: count as number,
+          color: colors[type as keyof typeof colors] || "hsl(var(--primary))",
+        }));
+
+        setBotDistribution(distData);
+      }
+
+      // Load hourly performance (from trades)
+      const { data: trades } = await supabase
+        .from('trades')
+        .select('*')
+        .eq('user_id', user?.id)
+        .gte('executed_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+
+      if (trades) {
+        const hourlyData = new Array(8).fill(0).map((_, i) => ({
+          time: `${String(i * 3).padStart(2, '0')}:00`,
+          aktivität: 0,
+        }));
+
+        trades.forEach((trade: any) => {
+          const hour = new Date(trade.executed_at).getHours();
+          const index = Math.floor(hour / 3);
+          if (hourlyData[index]) {
+            hourlyData[index].aktivität += 1;
+          }
+        });
+
+        setHourlyPerformance(hourlyData);
+      }
+
+    } catch (error) {
+      console.error('Error loading analytics:', error);
+      toast.error('Fehler beim Laden der Analysen');
+    } finally {
+      setLoading(false);
+    }
+  };
   const handleExport = () => {
-    // Export functionality would go here
-    console.log("Exporting analytics data...");
+    const csvData = [
+      ['Performance Data'],
+      ['Month', 'Gewinn', 'Kosten', 'Netto'],
+      ...performanceData.map(d => [d.month, d.gewinn, d.kosten, d.netto]),
+      [],
+      ['Bot Distribution'],
+      ['Type', 'Count'],
+      ...botDistribution.map(d => [d.name, d.value]),
+    ].map(row => row.join(',')).join('\n');
+
+    const blob = new Blob([csvData], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `analytics-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    toast.success('Analyse exportiert');
   };
 
   return (
@@ -56,10 +153,16 @@ export const AdvancedAnalytics = () => {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-card-foreground">Erweiterte Analysen</CardTitle>
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="w-4 h-4 mr-2" />
-            Export
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={loadAnalytics} disabled={loading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Aktualisieren
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="w-4 h-4 mr-2" />
+              Export
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
