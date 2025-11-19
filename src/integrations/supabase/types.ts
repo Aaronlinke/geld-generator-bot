@@ -232,6 +232,39 @@ export type Database = {
           },
         ]
       }
+      market_data: {
+        Row: {
+          created_at: string
+          id: string
+          last_updated: string
+          market_cap: number | null
+          price: number
+          price_change_24h: number | null
+          symbol: string
+          volume_24h: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_updated?: string
+          market_cap?: number | null
+          price: number
+          price_change_24h?: number | null
+          symbol: string
+          volume_24h?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_updated?: string
+          market_cap?: number | null
+          price?: number
+          price_change_24h?: number | null
+          symbol?: string
+          volume_24h?: number | null
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -344,6 +377,56 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "risk_management_rules_bot_strategy_id_fkey"
+            columns: ["bot_strategy_id"]
+            isOneToOne: false
+            referencedRelation: "bot_strategies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trades: {
+        Row: {
+          bot_strategy_id: string | null
+          created_at: string
+          executed_at: string
+          id: string
+          price: number
+          quantity: number
+          side: string
+          status: string
+          symbol: string
+          total_value: number
+          user_id: string
+        }
+        Insert: {
+          bot_strategy_id?: string | null
+          created_at?: string
+          executed_at?: string
+          id?: string
+          price: number
+          quantity: number
+          side: string
+          status?: string
+          symbol: string
+          total_value: number
+          user_id: string
+        }
+        Update: {
+          bot_strategy_id?: string | null
+          created_at?: string
+          executed_at?: string
+          id?: string
+          price?: number
+          quantity?: number
+          side?: string
+          status?: string
+          symbol?: string
+          total_value?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trades_bot_strategy_id_fkey"
             columns: ["bot_strategy_id"]
             isOneToOne: false
             referencedRelation: "bot_strategies"

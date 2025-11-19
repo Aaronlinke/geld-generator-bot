@@ -16,6 +16,8 @@ import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
 import { BotDetailsDialog } from "@/components/dashboard/BotDetailsDialog";
 import { SystemSettings } from "@/components/dashboard/SystemSettings";
 import { AddBotDialog } from "@/components/dashboard/AddBotDialog";
+import { MarketDataPanel } from "@/components/dashboard/MarketDataPanel";
+import { BotExecutionPanel } from "@/components/dashboard/BotExecutionPanel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bot, Withdrawal, Activity } from "@/types/bot";
@@ -342,6 +344,11 @@ const Index = () => {
 
           <TabsContent value="overview" className="space-y-6 mt-6">
             <StatsOverview />
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <MarketDataPanel />
+              <BotExecutionPanel />
+            </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">
