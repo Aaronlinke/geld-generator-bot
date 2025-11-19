@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,27 +12,91 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 interface BotSettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  botId: string;
   botName: string;
 }
 
-export const BotSettingsDialog = ({ open, onOpenChange, botName }: BotSettingsDialogProps) => {
+export const BotSettingsDialog = ({ open, onOpenChange, botId, botName }: BotSettingsDialogProps) => {
+  const { user } = useAuth();
   const [riskLevel, setRiskLevel] = useState([50]);
-  const [maxDaily, setMaxDaily] = useState("5000");
-  const [autoRestart, setAutoRestart] = useState(true);
+  const [maxDaily, setMaxDaily] = useState("10");
+  const [autoRestart, setAutoRestart] = useState(false);
   const [notifications, setNotifications] = useState(true);
-  const [stopLoss, setStopLoss] = useState("1000");
+  const [stopLoss, setStopLoss] = useState("5");
+  const [takeProfit, setTakeProfit] = useState("10");
+  const [loading, setLoading] = useState(false);
 
-  const handleSave = () => {
-    toast({
-      title: "Einstellungen gespeichert",
-      description: `${botName} wurde erfolgreich konfiguriert.`,
-    });
-    onOpenChange(false);
+  useEffect(() => {
+    if (open && botId) {
+      loadBotSettings();
+    }
+  }, [open, botId]);
+
+  const loadBotSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('bot_strategies')
+        .select('*')
+        .eq('id', botId)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setRiskLevel([data.risk_level || 50]);
+        setMaxDaily(data.max_daily_trades?.toString() || "10");
+        setAutoRestart(data.auto_restart || false);
+        setNotifications(data.notifications_enabled || true);
+        setStopLoss(data.stop_loss_percentage?.toString() || "5");
+        setTakeProfit(data.take_profit_percentage?.toString() || "10");
+      }
+    } catch (error: any) {
+      console.error('Error loading bot settings:', error);
+      toast.error('Fehler beim Laden der Einstellungen');
+    }
+  };
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('bot_strategies')
+        .update({
+          risk_level: riskLevel[0],
+          max_daily_trades: parseInt(maxDaily),
+          auto_restart: autoRestart,
+          notifications_enabled: notifications,
+          stop_loss_percentage: parseFloat(stopLoss),
+          take_profit_percentage: parseFloat(takeProfit),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', botId);
+
+      if (error) throw error;
+
+      await supabase.from('audit_logs').insert({
+        user_id: user?.id,
+        action: 'bot_updated',
+        resource_type: 'bot_strategy',
+        resource_id: botId,
+        metadata: { bot_name: botName }
+      });
+
+      toast.success('Einstellungen erfolgreich gespeichert');
+      onOpenChange(false);
+    } catch (error: any) {
+      console.error('Error saving bot settings:', error);
+      toast.error(error.message || 'Fehler beim Speichern der Einstellungen');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

@@ -1,17 +1,43 @@
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-
-const data = [
-  { time: "00:00", earnings: 0 },
-  { time: "04:00", earnings: 8450 },
-  { time: "08:00", earnings: 16780 },
-  { time: "12:00", earnings: 28900 },
-  { time: "16:00", earnings: 34560 },
-  { time: "20:00", earnings: 42780 },
-  { time: "24:00", earnings: 47523 },
-];
+import { supabase } from "@/integrations/supabase/client";
 
 export const EarningsChart = () => {
+  const [data, setData] = useState<Array<{ time: string; earnings: number }>>([]);
+
+  useEffect(() => {
+    loadEarningsData();
+  }, []);
+
+  const loadEarningsData = async () => {
+    try {
+      const { data: transactions } = await supabase
+        .from('financial_transactions')
+        .select('amount, created_at')
+        .eq('transaction_type', 'earning')
+        .order('created_at', { ascending: true });
+
+      if (transactions) {
+        // Group by hour
+        const hourlyData: Record<string, number> = {};
+        transactions.forEach(tx => {
+          const hour = new Date(tx.created_at).getHours();
+          const timeKey = `${hour.toString().padStart(2, '0')}:00`;
+          hourlyData[timeKey] = (hourlyData[timeKey] || 0) + tx.amount;
+        });
+
+        const chartData = Object.entries(hourlyData).map(([time, earnings]) => ({
+          time,
+          earnings
+        }));
+
+        setData(chartData);
+      }
+    } catch (error) {
+      console.error('Error loading earnings data:', error);
+    }
+  };
   return (
     <Card className="bg-gradient-dark border-border">
       <CardHeader>

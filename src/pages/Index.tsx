@@ -421,6 +421,7 @@ const Index = () => {
         <BotSettingsDialog
           open={settingsOpen}
           onOpenChange={setSettingsOpen}
+          botId={selectedBot?.id || ""}
           botName={selectedBot?.name || ""}
         />
 
