@@ -348,7 +348,7 @@ const Index = () => {
                 <EarningsChart />
               </div>
               <div>
-                <ActivityFeed activities={activities} />
+                <ActivityFeed />
               </div>
             </div>
             
