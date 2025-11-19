@@ -1,11 +1,48 @@
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, DollarSign, Activity } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 export const StatsOverview = () => {
-  const stats = [
+  const [stats, setStats] = useState({
+    totalEarnings: 0,
+    activeBots: 0,
+    winRate: 0,
+    roi: 0
+  });
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      const { data: bots } = await supabase
+        .from('bot_strategies')
+        .select('*');
+
+      const activeBots = bots?.filter(b => b.status === 'active').length || 0;
+      const totalEarnings = bots?.reduce((sum, b) => sum + (b.total_earnings || 0), 0) || 0;
+      const avgWinRate = bots?.reduce((sum, b) => sum + (b.win_rate || 0), 0) / (bots?.length || 1);
+      
+      // Calculate ROI (total earnings / initial investment)
+      const roi = totalEarnings > 0 ? ((totalEarnings / 10000) * 100) : 0;
+
+      setStats({
+        totalEarnings,
+        activeBots,
+        winRate: avgWinRate,
+        roi
+      });
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    }
+  };
+
+  const statsDisplay = [
     {
       title: "Gesamtgewinn",
-      value: "€234,567.89",
+      value: `€${stats.totalEarnings.toFixed(2)}`,
       change: "+12.5%",
       trend: "up",
       icon: DollarSign,
@@ -13,7 +50,7 @@ export const StatsOverview = () => {
     },
     {
       title: "Aktive Bots",
-      value: "8",
+      value: stats.activeBots.toString(),
       change: "+2",
       trend: "up",
       icon: Activity,
@@ -21,7 +58,7 @@ export const StatsOverview = () => {
     },
     {
       title: "Erfolgsrate",
-      value: "94.2%",
+      value: `${stats.winRate.toFixed(1)}%`,
       change: "+2.1%",
       trend: "up",
       icon: TrendingUp,
@@ -29,7 +66,7 @@ export const StatsOverview = () => {
     },
     {
       title: "ROI (30 Tage)",
-      value: "287%",
+      value: `${stats.roi.toFixed(0)}%`,
       change: "+15.3%",
       trend: "up",
       icon: TrendingUp,
@@ -39,7 +76,7 @@ export const StatsOverview = () => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      {stats.map((stat, index) => (
+      {statsDisplay.map((stat, index) => (
         <Card key={index} className="bg-gradient-dark border-border hover:shadow-card transition-all duration-300">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">

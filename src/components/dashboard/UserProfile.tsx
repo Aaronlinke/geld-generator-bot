@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -6,19 +6,71 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { User, Mail, Phone, Shield, Bell, CreditCard } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 
 export const UserProfile = () => {
-  const [name, setName] = useState("Max Mustermann");
-  const [email, setEmail] = useState("max@example.com");
-  const [phone, setPhone] = useState("+49 123 456789");
+  const { user } = useAuth();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSaveProfile = () => {
-    toast({
-      title: "Profil aktualisiert",
-      description: "Ihre Änderungen wurden erfolgreich gespeichert.",
-    });
+  useEffect(() => {
+    if (user) {
+      loadProfile();
+    }
+  }, [user]);
+
+  const loadProfile = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setFirstName(data.first_name || "");
+        setLastName(data.last_name || "");
+        setEmail(data.email || "");
+        setPhone(data.phone || "");
+        setCountry(data.country || "");
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          phone: phone,
+          country: country,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
+
+      toast.success('Profil erfolgreich aktualisiert');
+    } catch (error: any) {
+      console.error('Error saving profile:', error);
+      toast.error(error.message || 'Fehler beim Speichern des Profils');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -29,11 +81,11 @@ export const UserProfile = () => {
             <Avatar className="w-24 h-24">
               <AvatarImage src="/placeholder.svg" />
               <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
-                MM
+                {firstName.charAt(0)}{lastName.charAt(0)}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1">
-              <h2 className="text-2xl font-bold text-card-foreground mb-2">{name}</h2>
+              <h2 className="text-2xl font-bold text-card-foreground mb-2">{firstName} {lastName}</h2>
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <Mail className="w-4 h-4" />
@@ -68,22 +120,30 @@ export const UserProfile = () => {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Vollständiger Name</Label>
+                  <Label htmlFor="firstName">Vorname</Label>
                   <Input
-                    id="name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    id="firstName"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">E-Mail-Adresse</Label>
+                  <Label htmlFor="lastName">Nachname</Label>
                   <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="lastName"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
                   />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">E-Mail-Adresse</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  disabled
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Telefonnummer</Label>
@@ -93,8 +153,16 @@ export const UserProfile = () => {
                   onChange={(e) => setPhone(e.target.value)}
                 />
               </div>
-              <Button onClick={handleSaveProfile}>
-                Änderungen speichern
+              <div className="space-y-2">
+                <Label htmlFor="country">Land</Label>
+                <Input
+                  id="country"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                />
+              </div>
+              <Button onClick={handleSaveProfile} disabled={loading}>
+                {loading ? 'Wird gespeichert...' : 'Änderungen speichern'}
               </Button>
             </CardContent>
           </Card>
