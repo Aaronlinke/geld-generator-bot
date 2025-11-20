@@ -61,7 +61,10 @@ serve(async (req) => {
     });
 
     if (!analysisResponse.ok) {
-      throw new Error('Failed to get AI analysis');
+      const errorData = await analysisResponse.json().catch(() => ({ error: 'Unknown error' }));
+      const errorMsg = errorData.error || 'Failed to get AI analysis';
+      console.error('AI analysis error:', errorMsg);
+      throw new Error(errorMsg);
     }
 
     const { analysis, market_data } = await analysisResponse.json();
