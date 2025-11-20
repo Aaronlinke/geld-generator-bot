@@ -76,7 +76,16 @@ Based on this data, what is your trading recommendation?`;
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
       console.error('AI API error:', aiResponse.status, errorText);
-      throw new Error(`AI analysis failed: ${aiResponse.status}`);
+      
+      // Handle specific error cases
+      if (aiResponse.status === 402) {
+        throw new Error('INSUFFICIENT_CREDITS: Lovable AI credits exhausted. Please add more credits in Settings -> Workspace -> Usage.');
+      }
+      if (aiResponse.status === 429) {
+        throw new Error('RATE_LIMITED: Too many requests. Please wait a moment and try again.');
+      }
+      
+      throw new Error(`AI analysis failed: ${aiResponse.status} - ${errorText}`);
     }
 
     const aiData = await aiResponse.json();

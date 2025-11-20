@@ -33,11 +33,14 @@ export const BotExecutionPanel = () => {
   };
 
   const executeBotStrategy = async (botId: string) => {
+    let responseData: any = null;
     try {
       setExecuting(botId);
       const { data, error } = await supabase.functions.invoke('execute-bot-strategy', {
         body: { botStrategyId: botId }
       });
+
+      responseData = data;
 
       if (error) throw error;
 
@@ -47,7 +50,23 @@ export const BotExecutionPanel = () => {
       }
     } catch (error: any) {
       console.error('Error executing bot:', error);
-      toast.error('Fehler bei der Bot-Ausführung');
+      
+      // Check for specific error types in the response
+      const errorMsg = error.message || responseData?.error || "Bot konnte nicht ausgeführt werden";
+      
+      if (errorMsg.includes('INSUFFICIENT_CREDITS')) {
+        toast.error('⚠️ Keine AI Credits mehr!', {
+          description: 'Lovable AI Credits aufgebraucht! Gehe zu Settings → Workspace → Usage um Credits aufzuladen.'
+        });
+      } else if (errorMsg.includes('RATE_LIMITED')) {
+        toast.error('⏱️ Rate Limit erreicht', {
+          description: 'Zu viele Anfragen. Bitte warte einen Moment.'
+        });
+      } else {
+        toast.error('Fehler bei der Bot-Ausführung', {
+          description: errorMsg
+        });
+      }
     } finally {
       setExecuting(null);
     }
