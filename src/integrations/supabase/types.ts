@@ -93,6 +93,8 @@ export type Database = {
         Row: {
           ai_enabled: boolean | null
           auto_restart: boolean | null
+          content_settings: Json | null
+          content_type: string | null
           created_at: string
           daily_profit: number | null
           description: string | null
@@ -115,6 +117,8 @@ export type Database = {
         Insert: {
           ai_enabled?: boolean | null
           auto_restart?: boolean | null
+          content_settings?: Json | null
+          content_type?: string | null
           created_at?: string
           daily_profit?: number | null
           description?: string | null
@@ -137,6 +141,8 @@ export type Database = {
         Update: {
           ai_enabled?: boolean | null
           auto_restart?: boolean | null
+          content_settings?: Json | null
+          content_type?: string | null
           created_at?: string
           daily_profit?: number | null
           description?: string | null
@@ -228,6 +234,50 @@ export type Database = {
             columns: ["trading_account_id"]
             isOneToOne: false
             referencedRelation: "trading_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      generated_content: {
+        Row: {
+          bot_strategy_id: string | null
+          content: string
+          content_type: string
+          created_at: string | null
+          id: string
+          metadata: Json | null
+          status: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          bot_strategy_id?: string | null
+          content: string
+          content_type: string
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          status?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          bot_strategy_id?: string | null
+          content?: string
+          content_type?: string
+          created_at?: string | null
+          id?: string
+          metadata?: Json | null
+          status?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_content_bot_strategy_id_fkey"
+            columns: ["bot_strategy_id"]
+            isOneToOne: false
+            referencedRelation: "bot_strategies"
             referencedColumns: ["id"]
           },
         ]
