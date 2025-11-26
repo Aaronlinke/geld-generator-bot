@@ -18,6 +18,7 @@ import { SystemSettings } from "@/components/dashboard/SystemSettings";
 import { AddBotDialog } from "@/components/dashboard/AddBotDialog";
 import { MarketDataPanel } from "@/components/dashboard/MarketDataPanel";
 import { BotExecutionPanel } from "@/components/dashboard/BotExecutionPanel";
+import { ContentBotPanel } from "@/components/dashboard/ContentBotPanel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bot, Withdrawal, Activity } from "@/types/bot";
@@ -347,7 +348,10 @@ const Index = () => {
             
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <MarketDataPanel />
-              <BotExecutionPanel />
+              <div className="space-y-6">
+                <BotExecutionPanel />
+                <ContentBotPanel />
+              </div>
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
