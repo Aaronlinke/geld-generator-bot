@@ -39,21 +39,12 @@ const Index = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [totalBalance, setTotalBalance] = useState(0);
 
-  // Redirect to auth if not logged in
+  // Load all data from database (no auth required)
   useEffect(() => {
-    if (!authLoading && !user) {
-      navigate("/auth");
-    }
-  }, [user, authLoading, navigate]);
-
-  // Load all data from database
-  useEffect(() => {
-    if (user) {
-      loadAllData();
-      const cleanup = setupRealtimeSubscriptions();
-      return cleanup;
-    }
-  }, [user]);
+    loadAllData();
+    const cleanup = setupRealtimeSubscriptions();
+    return cleanup;
+  }, []);
 
   const loadAllData = async () => {
     try {
