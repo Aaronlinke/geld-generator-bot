@@ -318,7 +318,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto">
-        <DashboardHeader onLogout={signOut} />
+        <DashboardHeader onLogout={user ? signOut : undefined} />
         
         <Tabs defaultValue="overview" className="mb-8">
           <TabsList className="grid w-full grid-cols-6">
