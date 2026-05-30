@@ -432,7 +432,7 @@ const Index = () => {
         <AddBotDialog
           open={addBotOpen}
           onOpenChange={setAddBotOpen}
-          userId={user.id}
+          userId={user?.id || ""}
         />
       </div>
     </div>
