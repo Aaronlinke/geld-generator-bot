@@ -39,21 +39,12 @@ const Index = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [totalBalance, setTotalBalance] = useState(0);
 
-  // Redirect to auth if not logged in
+  // Load all data from database (no auth required)
   useEffect(() => {
-    if (!authLoading && !user) {
-      navigate("/auth");
-    }
-  }, [user, authLoading, navigate]);
-
-  // Load all data from database
-  useEffect(() => {
-    if (user) {
-      loadAllData();
-      const cleanup = setupRealtimeSubscriptions();
-      return cleanup;
-    }
-  }, [user]);
+    loadAllData();
+    const cleanup = setupRealtimeSubscriptions();
+    return cleanup;
+  }, []);
 
   const loadAllData = async () => {
     try {
@@ -316,7 +307,7 @@ const Index = () => {
     setSettingsOpen(true);
   };
 
-  if (authLoading || loading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -324,14 +315,10 @@ const Index = () => {
     );
   }
 
-  if (!user) {
-    return null;
-  }
-
   return (
     <div className="min-h-screen bg-background p-6">
       <div className="max-w-7xl mx-auto">
-        <DashboardHeader onLogout={signOut} />
+        <DashboardHeader onLogout={user ? signOut : undefined} />
         
         <Tabs defaultValue="overview" className="mb-8">
           <TabsList className="grid w-full grid-cols-6">
@@ -445,7 +432,7 @@ const Index = () => {
         <AddBotDialog
           open={addBotOpen}
           onOpenChange={setAddBotOpen}
-          userId={user.id}
+          userId={user?.id || ""}
         />
       </div>
     </div>
